@@ -217,7 +217,7 @@ int main( int argc,char* argv[] ){
     bool terminate = false;
 
     /* 创建共享内存，作为所有客户socket连接的读缓存 */
-    shmfd = shm_open( shm_name, O_CREATE | O_RDWR, 0666 );
+    shmfd = shm_open( shm_name, O_CREAT | O_RDWR, 0666 );
     assert( shmfd != -1 );
     ret = ftruncate( shmfd, USER_LIMIT*BUFFER_SIZE );
     assert( ret!=-1 );
