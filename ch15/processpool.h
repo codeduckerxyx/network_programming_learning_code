@@ -17,6 +17,16 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 
+
+#define __DEBUG__
+ 
+#ifdef __DEBUG__
+#define DEBUG(format,...) printf("File: %s",__FILE__);printf(" ,Line %05d : ", __LINE__);printf(format, ##__VA_ARGS__);printf("\n");
+#else
+#define DEBUG(format,...)
+#endif
+
+
 /* 描述一个子进程的类，m_pid是目标子进程的PID，m_pipefd是父进程和子进程通信用的管道 */
 class process{
 public:
@@ -101,6 +111,7 @@ static void removefd( int epollfd, int fd ){
 
 
 static void sig_handler( int sig ){
+    DEBUG("sig : %d", sig );
     int save_errno = errno;
     int msg = sig;
     send( sig_pipefd[1], (char* )&msg, 1, 0 );
@@ -178,6 +189,9 @@ void processpool< T >::run(){
 
 template< typename T >
 void processpool< T >::run_child(){
+    
+    DEBUG( "run_child %d start", m_idx );
+    
     setup_sig_pipe();
 
     /* 每个子进程都通过其在进程池中的序号值m_idx找到与父进程通信的管道 */
@@ -203,10 +217,15 @@ void processpool< T >::run_child(){
             if( ( sockfd == pipefd ) && ( events[i].events & EPOLLIN ) ){
                 int client = 0;
                 /* 从父，子进程之间的管道读取数据，并将结果保存在变量client中。如果读取成功，则表示有新客户连接到来 */
-                ret = recv( sockfd, ( char* )client, sizeof( client ), 0 );
+                ret = recv( sockfd, ( char* )&client, sizeof( client ), 0 );
+                
+                DEBUG( "run_child %d recv pipefd ret = %d", m_idx, ret );
+                
                 if( ( ( ( ret < 0 ) && ( errno != EAGAIN ) ) ) || ( ret == 0 ) ){
+                    DEBUG("errno is: %d",errno);
                     continue;
                 }else{
+                    
                     struct sockaddr_in client_address;
                     socklen_t client_addrlength = sizeof( client_address );
                     int connfd = accept( m_listenfd, ( struct sockaddr* )&client_address, &client_addrlength );
@@ -217,6 +236,7 @@ void processpool< T >::run_child(){
                     addfd( m_epollfd, connfd );
                     /* 模板类T必须实现init方法，以初始化一个客户连接。我们直接使用connfd来索引逻辑处理对象（T类型的对象），以提高效率 */
                     users[ connfd ].init( m_epollfd, connfd, client_address );
+                    DEBUG("connfd accept success");
                 }
             }
             /* 下面处理子进程接收到的信号 */
@@ -250,6 +270,7 @@ void processpool< T >::run_child(){
             }
             /* 如果是其他可读数据，那么必然是客户请求到来。调用逻辑处理对象的process方法处理之 */
             else if( events[i].events & EPOLLIN ){
+                DEBUG(" call process()!\n ");
                 users[sockfd].process();
             }else{
                 continue;
@@ -262,11 +283,17 @@ void processpool< T >::run_child(){
     close( pipefd );
     //close( m_listenfd );  /* 应该有m_listenfd的创建者来关闭这个文件描述符，即所谓的“对象（比如一个文件描述符，又或者是一段堆内存）由哪个函数创建，就应该由哪个函数销毁” */
     close( m_epollfd );
+
+    DEBUG( "run_child %d end", m_idx );
+
 }
 
 
 template< typename T >
 void processpool< T >::run_parent(){
+    
+    DEBUG("run_parent start");
+
     setup_sig_pipe();
 
     /* 父进程监听m_listenfd */
@@ -316,9 +343,11 @@ void processpool< T >::run_parent(){
                     for( int i = 0; i < ret; ++i ){
                         switch( signals[i] ){
                             case SIGCHLD:{
+                                DEBUG( "epoll SIGCHLD start" );
                                 pid_t pid;
                                 int stat;
                                 while( ( pid == waitpid( -1, &stat, WNOHANG ) ) > 0 ){
+                                    DEBUG("waitpid success");
                                     for( int i = 0; i < m_process_number; ++i ){
                                         /* 如果进程池中第i个子进程退出了，则主进程关闭相应的通信管道，并设置相应的m_pid为-1，以标记该子进程已经退出 */
                                         if( m_sub_process[i].m_pid == pid ){
@@ -328,6 +357,7 @@ void processpool< T >::run_parent(){
                                         }
                                     }
                                 }
+                                DEBUG( "waitpid : %d",pid );
                                 /* 如果所有子进程都已经退出了，则父进程也退出 */
                                 m_stop = true;
                                 for( int i = 0; i < m_process_number; ++i ){
@@ -335,6 +365,7 @@ void processpool< T >::run_parent(){
                                         m_stop = false;
                                     }
                                 }
+                                DEBUG( "all child process end parent: %d", m_stop );
                                 break;
                             }
                             case SIGTERM:
@@ -362,6 +393,9 @@ void processpool< T >::run_parent(){
 
     //close( m_listenfd );  /* 由创建者关闭这个文件描述符 */
     close( m_epollfd );
+
+    DEBUG("run_parent end");
+
 }
 
 #endif
