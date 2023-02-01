@@ -18,7 +18,7 @@
 #include <sys/stat.h>
 
 
-#define __DEBUG__
+//#define __DEBUG__
  
 #ifdef __DEBUG__
 #define DEBUG(format,...) printf("File: %s",__FILE__);printf(" ,Line %05d : ", __LINE__);printf(format, ##__VA_ARGS__);printf("\n");
