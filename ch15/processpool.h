@@ -346,7 +346,7 @@ void processpool< T >::run_parent(){
                                 DEBUG( "epoll SIGCHLD start" );
                                 pid_t pid;
                                 int stat;
-                                while( ( pid == waitpid( -1, &stat, WNOHANG ) ) > 0 ){
+                                while( ( pid = waitpid( -1, &stat, WNOHANG ) ) > 0 ){
                                     DEBUG("waitpid success");
                                     for( int i = 0; i < m_process_number; ++i ){
                                         /* 如果进程池中第i个子进程退出了，则主进程关闭相应的通信管道，并设置相应的m_pid为-1，以标记该子进程已经退出 */
